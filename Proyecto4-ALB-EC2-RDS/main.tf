@@ -89,6 +89,41 @@ resource "aws_internet_gateway" "ITGW" {
 }
 #-----------------------------------------------------
 
+#-----------------NAT GATEWAY--------------------------------
+#resource "aws_network_interface" "nwproject1" {
+#  subnet_id       = aws_subnet.PublicSubnet1.id
+#  security_groups = [aws_security_group.SgWebServer.id]
+#  tags = {
+#    Name = "Interface EC2"
+#  }
+#}
+
+resource "aws_eip" "one" {
+#  vpc = true
+#  network_interface         = aws_network_interface.nwproject1.id
+#  depends_on = [aws_internet_gateway.ITGW]
+  tags = {
+    Name = "IP - ITG"
+  }
+}
+
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = aws_eip.one.id
+  subnet_id = aws_subnet.PublicSubnet1.id
+  
+  tags = {
+    Name = "NAT GW"
+  }
+}
+
+resource "aws_route" "NGWG-Table" {
+  route_table_id = aws_route_table.RouteTablePrivate.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id = aws_nat_gateway.nat_gw.id
+}
+
+#--------------------------------------------------------------
+
 #---------------- ROUTE TABLE PUBLIC----------------------------
 resource "aws_route_table" "RouteTablePublic" {
   vpc_id = aws_vpc.Project4.id
@@ -104,14 +139,13 @@ resource "aws_route_table" "RouteTablePublic" {
 }
 #----------------------------------------------------------
 
-#---------------- PRIVATE TABLE PUBLIC----------------------------
+#---------------- PRIVATE TABLE PRIVATE----------------------------
 resource "aws_route_table" "RouteTablePrivate" {
   vpc_id = aws_vpc.Project4.id
   tags = {
     Name = "Private Route Table"
   }
 }
-
 #------------------------------------------------------------------
 
 #---- ASOCIAR SUBREDES PUBLICAS EN LA TABLA DE ENRUTAMIENTO PUBLICA---
@@ -233,7 +267,7 @@ resource "aws_security_group" "SgWebServer" {
 resource "aws_instance" "WebServer" {
   ami = "ami-0e83be366243f524a"
   instance_type = "t2.micro"
-  key_name = "PruebaTerraform"
+  key_name = "Terraform"
   
   network_interface {
     device_index = 0
@@ -289,7 +323,7 @@ resource "aws_lb" "alb" {
   internal = false
   load_balancer_type = "application"
   security_groups = [aws_security_group.SgAlb.id]
-  subnets = [aws_subnet.PublicSubnet2.id, aws_subnet.PublicSubnet3.id]
+  subnets = [aws_subnet.PublicSubnet1.id,aws_subnet.PublicSubnet2.id, aws_subnet.PublicSubnet3.id]
 
   tags = {
     Name = "ALB WEB SERVER"
@@ -320,6 +354,12 @@ resource "aws_lb_target_group" "target-group-webserver" {
   tags = {
     Name = "TARGET GROUP WEB SERVER"
   }
+}
+
+resource "aws_lb_target_group_attachment" "ec2_target" {
+  target_group_arn = aws_lb_target_group.target-group-webserver.arn
+  target_id = aws_instance.WebServer.id
+  port = 80
 }
 
 resource "aws_lb_listener" "rule_alb" {
